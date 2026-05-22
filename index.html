@@ -41,17 +41,44 @@
         .log-entry.gameover { background: rgba(76,175,80,0.3); color:#B8FF99; font-weight:bold; text-align:center; font-size:1.1em; }
         .game-over-screen { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.9); display:none; justify-content:center; align-items:center; z-index:1000; flex-direction:column; }
         .game-over-screen.active { display:flex; }
+        .menu-screen { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.92); display:flex; justify-content:center; align-items:center; z-index:1100; }
+        .menu-content { background: rgba(10,10,30,0.96); border: 2px solid #444; border-radius: 20px; padding: 40px; width: min(700px,90vw); text-align:center; box-shadow:0 0 50px rgba(0,0,0,0.5); }
+        .menu-content h1 { font-size: 3em; margin-bottom: 20px; color:#FFD700; }
+        .menu-content p { color:#eee; margin-bottom: 25px; font-size:1.05em; }
+        .menu-options, .difficulty-select { display:grid; grid-template-columns: repeat(3,1fr); gap: 15px; margin-bottom: 20px; }
+        .menu-options button, .difficulty-select button { padding: 15px 20px; border:none; border-radius: 12px; font-size: 1em; cursor:pointer; font-weight:bold; transition: transform 0.2s ease, background 0.2s ease; }
+        .menu-options button:hover, .difficulty-select button:hover { transform: translateY(-2px); }
+        .difficulty-select button.active { background: linear-gradient(135deg,#9B5CF6,#7A3FE3); color:white; }
+        .menu-hidden { display:none; }
         .game-over-content { text-align:center; background: linear-gradient(135deg, rgba(0,0,0,0.8), rgba(0,0,0,0.6)); padding:40px; border-radius:20px; border:3px solid #FFD700; box-shadow:0 0 50px rgba(255,215,0,0.5); }
         .game-over-content h1 { font-size:3em; margin-bottom:20px; color:#FFD700; text-shadow:0 0 10px rgba(255,215,0,0.8); }
         .game-over-content p { font-size:1.5em; margin:20px 0; color:#fff; }
         .game-over-content button { margin-top:30px; padding:15px 40px; font-size:1.2em; background: linear-gradient(135deg,#FFD700,#FFC700); color:#000; border:2px solid #fff; }
         .controls-info { background: rgba(0,0,0,0.5); border-radius:10px; padding:15px; margin-bottom:20px; border-left:4px solid #FFD700; font-size:0.9em; line-height:1.6; }
         .controls-info h3 { margin-bottom:10px; color:#FFD700; }
-        .current-turn { text-align:center; font-size:1.2em; margin-bottom:15px; font-weight:bold; color:#FFD700; }
+        .current-turn { text-align:center; font-size:1.2em; margin-bottom:5px; font-weight:bold; color:#FFD700; }
+        .current-mode { text-align:center; margin-bottom:15px; color:#ddd; font-size:1em; }
     </style>
 </head>
 <body>
-    <div class="game-container">
+    <div class="menu-screen" id="menuScreen">
+        <div class="menu-content">
+            <h1>RPG with RPG</h1>
+            <p>Choose your mode and the bot difficulty before starting your lonely quest.</p>
+            <div class="menu-options">
+                <button id="twoPlayerBtn">Two Player</button>
+                <button id="singlePlayerBtn">Single Player</button>
+                <button id="instructionsBtn">Instructions</button>
+            </div>
+            <div class="difficulty-select" id="difficultySelect">
+                <button class="difficulty-btn active" data-diff="easy" id="diffEasy">Easy</button>
+                <button class="difficulty-btn" data-diff="medium" id="diffMedium">Medium</button>
+                <button class="difficulty-btn" data-diff="hard" id="diffHard">Hard</button>
+            </div>
+            <p id="menuHint">Select a mode to begin.</p>
+        </div>
+    </div>
+    <div class="game-container menu-hidden" id="gameContainer">
         <div class="title">⚔️ RPG with RPG ⚔️</div>
         <div class="controls-info">
             <h3>Controls</h3>
@@ -61,6 +88,7 @@
         </div>
 
         <div class="current-turn" id="currentTurn">Player 1's Turn</div>
+        <div class="current-mode" id="currentMode">Mode: Two Player</div>
 
         <div class="battle-area">
             <div class="player-card p1 active" id="player1Card">
@@ -120,7 +148,7 @@
             <div class="game-over-content">
                 <h1 id="gameOverTitle">🎉 VICTORY! 🎉</h1>
                 <p id="gameOverText"></p>
-                <button onclick="location.reload()">Play Again</button>
+                <button onclick="returnToMenu()">Main Menu</button>
             </div>
         </div>
     </div>
@@ -131,7 +159,9 @@
             player1: { baseLives: 3, tempLives: [], mana: 0, isDefending: false, name: 'Player 1', rpgArmed: false, rpgReadyTurns: 0 },
             player2: { baseLives: 3, tempLives: [], mana: 0, isDefending: false, name: 'Player 2', rpgArmed: false, rpgReadyTurns: 0 },
             currentTurn: 1,
-            gameOver: false
+            gameOver: false,
+            mode: 'local',
+            botDifficulty: 'easy'
         };
 
         // Constants
@@ -155,8 +185,28 @@
         const logArea = document.getElementById('logArea');
         const gameOverScreen = document.getElementById('gameOverScreen');
         const currentTurnDisplay = document.getElementById('currentTurn');
+        const currentModeDisplay = document.getElementById('currentMode');
+        const menuScreen = document.getElementById('menuScreen');
+        const gameContainer = document.getElementById('gameContainer');
+        const menuHint = document.getElementById('menuHint');
+        const p1NameLabel = document.querySelector('#player1Card .player-name');
+        const p2NameLabel = document.querySelector('#player2Card .player-name');
+        const difficultyButtons = document.querySelectorAll('.difficulty-btn');
+        const twoPlayerBtn = document.getElementById('twoPlayerBtn');
+        const singlePlayerBtn = document.getElementById('singlePlayerBtn');
+        const instructionsBtn = document.getElementById('instructionsBtn');
         const p1Card = document.getElementById('player1Card');
         const p2Card = document.getElementById('player2Card');
+
+        // Initialize menu listeners
+        difficultyButtons.forEach((button) => {
+            button.addEventListener('click', () => setDifficulty(button.dataset.diff));
+        });
+        twoPlayerBtn.addEventListener('click', () => startGame('local'));
+        singlePlayerBtn.addEventListener('click', () => startGame('bot'));
+        instructionsBtn.addEventListener('click', () => {
+            menuHint.textContent = 'Player 1 keys: Q,W,E,R. Player 2 keys: U,I,O,P. In singleplayer the bot plays player 2.';
+        });
 
         // Initialize button listeners
         document.getElementById('p1Attack').addEventListener('click', () => playerAction(1, 'attack'));
@@ -188,8 +238,9 @@
             }
         });
 
-        function playerAction(player, action) {
+        function playerAction(player, action, isBot = false) {
             if (game.gameOver || game.currentTurn !== player) return;
+            if (game.mode === 'bot' && player === 2 && !isBot) return;
 
             const actor = player === 1 ? game.player1 : game.player2;
             const opponent = player === 1 ? game.player2 : game.player1;
@@ -204,6 +255,89 @@
 
         function getTotalLives(player) {
             return player.baseLives + player.tempLives.length;
+        }
+
+        function setDifficulty(difficulty) {
+            game.botDifficulty = difficulty;
+            difficultyButtons.forEach((button) => {
+                button.classList.toggle('active', button.dataset.diff === difficulty);
+            });
+            menuHint.textContent = `Bot difficulty set to ${difficulty}.`; 
+        }
+
+        function resetGameState() {
+            game.player1 = { baseLives: 3, tempLives: [], mana: 0, isDefending: false, name: 'Player 1', rpgArmed: false, rpgReadyTurns: 0 };
+            game.player2 = { baseLives: 3, tempLives: [], mana: 0, isDefending: false, name: game.mode === 'bot' ? 'Bot' : 'Player 2', rpgArmed: false, rpgReadyTurns: 0 };
+            game.currentTurn = 1;
+            game.gameOver = false;
+            logArea.innerHTML = '';
+            updateTurnDisplay();
+            updateModeDisplay();
+        }
+
+        function startGame(mode) {
+            game.mode = mode;
+            menuScreen.classList.add('menu-hidden');
+            gameContainer.classList.remove('menu-hidden');
+            menuHint.textContent = 'Good luck!';
+            resetGameState();
+            addLog(`Starting ${mode === 'bot' ? 'single player' : 'two player'} mode.`, 'default');
+            updateUI();
+            if (game.mode === 'bot' && game.currentTurn === 2) {
+                setTimeout(botTurn, 700);
+            }
+        }
+
+        function returnToMenu() {
+            game.gameOver = true;
+            gameOverScreen.classList.remove('active');
+            menuScreen.classList.remove('menu-hidden');
+            gameContainer.classList.add('menu-hidden');
+            menuHint.textContent = 'Select a mode to begin.';
+        }
+
+        function updateModeDisplay() {
+            const modeText = game.mode === 'bot' ? `Single Player (${game.botDifficulty})` : 'Two Player';
+            currentModeDisplay.textContent = `Mode: ${modeText}`;
+        }
+
+        function botTurn() {
+            if (game.gameOver || game.mode !== 'bot' || game.currentTurn !== 2) return;
+            const actor = game.player2;
+            const opponent = game.player1;
+            const difficultyWeight = { easy: 0.4, medium: 0.7, hard: 0.9 }[game.botDifficulty] || 0.6;
+            const candidates = [];
+
+            const canLaunch = actor.rpgArmed;
+            const spellCost = actor.mana < 50 ? 10 : 20;
+            const canSpell = actor.mana >= spellCost;
+
+            if (canLaunch) candidates.push({ action: 'launch', score: 8 });
+            if (canSpell) {
+                const healValue = getTotalLives(actor) < MAX_TOTAL_LIVES ? 3 : 1;
+                candidates.push({ action: 'spell', score: 2 + healValue + (actor.mana / MAX_MANA) * 3 });
+            }
+            candidates.push({ action: 'attack', score: 3 + (actor.mana < 40 ? 4 : 0) + (opponent.isDefending ? 0 : 2) });
+            candidates.push({ action: 'defend', score: 2 + (opponent.rpgArmed ? 4 : 0) + (actor.mana < 30 ? 2 : 0) });
+
+            let action;
+            if (Math.random() < difficultyWeight) {
+                action = candidates.reduce((best, candidate) => candidate.score > best.score ? candidate : best).action;
+            } else {
+                const total = candidates.reduce((sum, candidate) => sum + candidate.score, 0);
+                let choice = Math.random() * total;
+                for (const candidate of candidates) {
+                    choice -= candidate.score;
+                    if (choice <= 0) { action = candidate.action; break; }
+                }
+            }
+
+            // Ensure legal fallback
+            if (action === 'spell' && !canSpell) action = 'attack';
+            if (action === 'launch' && !canLaunch) action = 'attack';
+
+            addLog(`${actor.name} decides to ${action}.`, 'default');
+            playerAction(2, action, true);
         }
 
         function grantTempLife(player, count = 1) {
@@ -251,39 +385,59 @@
 
         function performSpell(actor, playerNum) {
             const startMana = actor.mana;
-            const cost = startMana < 50 ? 10 : 20;
+            const cost = startMana < 50 ? 15 : 30;
             if (actor.mana < cost) {
                 addLog(`${actor.name} tried to cast a spell but didn't have ${cost} mana.`, 'defend');
                 return;
             }
 
-            // Overall success probability increases with mana (lower mana -> lower chance)
+            // Lower mana means lower chance to succeed, and failures have a penalty.
             const manaRatio = Math.min(1, startMana / MAX_MANA);
-            const successProb = 0.15 + 0.75 * manaRatio; // 0.15..0.9
-            const overhealProb = 0.05 + 0.30 * manaRatio; // within successes, chance of overheal
+            const successProb = 0.10 + 0.60 * manaRatio; // 0.10..0.70
+            const overhealProb = 0.05 + 0.25 * manaRatio; // 0.05..0.30
 
             const roll = Math.random();
             actor.mana = Math.max(0, actor.mana - cost);
 
             if (roll > successProb) {
-                addLog(`${actor.name}'s spell fizzled and did nothing. (roll ${(roll).toFixed(2)} > success ${(successProb).toFixed(2)})`, 'defend');
+                const penalty = 10;
+                const opponent = actor === game.player1 ? game.player2 : game.player1;
+                opponent.mana = Math.min(MAX_MANA, opponent.mana + penalty);
+                addLog(`${actor.name}'s spell fizzled and ${opponent.name} siphoned ${penalty} mana!`, 'defend');
                 updateUI();
                 return;
             }
 
             // Spell succeeded; determine overheal vs heal
             const roll2 = Math.random();
+            const backfireRoll = Math.random();
+            const healBackfireProb = 0.15; // 15% chance on heal to make it temporary
+            const tempDestroyProb = 0.12; // 12% chance on overheal to destroy all temp lives
+
             if (roll2 < overhealProb) {
-                if (getTotalLives(actor) < MAX_TOTAL_LIVES) {
+                // Overheal path
+                if (backfireRoll < tempDestroyProb && actor.tempLives.length > 0) {
+                    // Backfire: destroy all temp lives
+                    const tempCount = actor.tempLives.length;
+                    actor.tempLives = [];
+                    addLog(`${actor.name} cast a spell but it BACKFIRED! All ${tempCount} temporary overheal lives were destroyed!`, 'defend');
+                } else if (getTotalLives(actor) < MAX_TOTAL_LIVES) {
                     grantTempLife(actor, 1);
                     addLog(`${actor.name} cast a spell and OVERHEALED! +1 temporary life (lasting ${OVERHEAL_TURNS} turns).`, 'defend');
                 } else {
                     addLog(`${actor.name} cast a spell but already has maximum lives.`, 'defend');
                 }
             } else {
+                // Heal path
                 if (actor.baseLives < MAX_BASE_LIVES) {
-                    actor.baseLives += 1;
-                    addLog(`${actor.name} cast a spell and healed 1 life (base).`, 'defend');
+                    if (backfireRoll < healBackfireProb) {
+                        // Heal is temporary instead of permanent
+                        grantTempLife(actor, 1);
+                        addLog(`${actor.name} cast a spell and healed 1 life, but it's only temporary (lasting 15 turns)!`, 'defend');
+                    } else {
+                        actor.baseLives += 1;
+                        addLog(`${actor.name} cast a spell and healed 1 life (permanent).`, 'defend');
+                    }
                 } else if (getTotalLives(actor) < MAX_TOTAL_LIVES) {
                     grantTempLife(actor, 1);
                     addLog(`${actor.name} cast a spell and gained 1 temporary life (lasting ${OVERHEAL_TURNS} turns).`, 'defend');
@@ -324,7 +478,7 @@
 
         function endTurn() {
             // On end of turn: increment RPG ready timers and handle timeouts
-            [game.player1, game.player2].forEach((p, idx) => {
+            [game.player1, game.player2].forEach((p) => {
                 if (p.rpgArmed) {
                     p.rpgReadyTurns += 1;
                     if (p.rpgReadyTurns >= RPG_TIMEOUT_TURNS) {
@@ -349,6 +503,10 @@
             game.currentTurn = game.currentTurn === 1 ? 2 : 1;
             updateTurnDisplay();
             updateUI();
+
+            if (game.mode === 'bot' && game.currentTurn === 2 && !game.gameOver) {
+                setTimeout(botTurn, 700);
+            }
         }
 
         function updateUI() {
@@ -369,22 +527,29 @@
             p2ManaBar.textContent = `${Math.floor(game.player2.mana)}/${MAX_MANA}`;
             const p2RocketAlert = document.getElementById('p2Rocket');
             if (game.player2.rpgArmed) p2RocketAlert.classList.add('active'); else p2RocketAlert.classList.remove('active');
+            if (p1NameLabel) p1NameLabel.textContent = game.player1.name;
+            if (p2NameLabel) p2NameLabel.textContent = game.player2.name;
 
             // Enable/disable buttons based on turn and mana
             const p1SpellBtn = document.getElementById('p1Spell');
             const p1LaunchBtn = document.getElementById('p1Launch');
+            const p2AttackBtn = document.getElementById('p2Attack');
+            const p2DefendBtn = document.getElementById('p2Defend');
             const p2SpellBtn = document.getElementById('p2Spell');
             const p2LaunchBtn = document.getElementById('p2Launch');
+            const p2Enabled = game.mode === 'local' && game.currentTurn === 2 && !game.gameOver;
             if (p1SpellBtn) {
                 const cost1 = (game.player1.mana < 50) ? 10 : 20;
                 p1SpellBtn.disabled = !(game.currentTurn === 1 && game.player1.mana >= cost1 && !game.gameOver);
             }
+            if (p2AttackBtn) p2AttackBtn.disabled = !p2Enabled;
+            if (p2DefendBtn) p2DefendBtn.disabled = !p2Enabled;
             if (p2SpellBtn) {
                 const cost2 = (game.player2.mana < 50) ? 10 : 20;
-                p2SpellBtn.disabled = !(game.currentTurn === 2 && game.player2.mana >= cost2 && !game.gameOver);
+                p2SpellBtn.disabled = !(p2Enabled && game.player2.mana >= cost2);
             }
             if (p1LaunchBtn) p1LaunchBtn.disabled = !(game.currentTurn === 1 && game.player1.rpgArmed && !game.gameOver);
-            if (p2LaunchBtn) p2LaunchBtn.disabled = !(game.currentTurn === 2 && game.player2.rpgArmed && !game.gameOver);
+            if (p2LaunchBtn) p2LaunchBtn.disabled = !(p2Enabled && game.player2.rpgArmed);
 
             // Update active player card highlighting
             if (game.currentTurn === 1) { p1Card.classList.add('active'); p2Card.classList.remove('active'); }
