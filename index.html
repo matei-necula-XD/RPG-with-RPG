@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RPG with RPG - Turn-Based Fighting Game</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Arial', sans-serif; display: flex; justify-content: center; align-items: center; min-height: 100vh; background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: #fff; }
+        .game-container { width: 100%; max-width: 1000px; padding: 20px; }
+        .title { text-align: center; margin-bottom: 30px; font-size: 2.5em; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
+        .battle-area { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+        .player-card { background: linear-gradient(135deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.5) 100%); border-radius: 10px; padding: 20px; border: 2px solid #4CAF50; box-shadow: 0 0 20px rgba(76,175,80,0.3); transition: all 0.3s ease; }
+        .player-card.p1 { border-color: #FF6B6B; box-shadow: 0 0 20px rgba(255,107,107,0.3); }
+        .player-card.p2 { border-color: #4ECDC4; box-shadow: 0 0 20px rgba(78,205,196,0.3); }
+        .player-card.active { transform: scale(1.05); box-shadow: 0 0 30px rgba(255,215,0,0.6); border-color: #FFD700; }
+        .player-name { font-size: 1.5em; margin-bottom: 15px; font-weight: bold; }
+        .stat { margin: 10px 0; font-size: 1.1em; }
+        .stat-label { font-weight: bold; display: inline-block; width: 80px; }
+        .bar-container { width: 100%; height: 25px; background: rgba(0,0,0,0.5); border-radius: 5px; overflow: hidden; margin-top: 5px; border: 1px solid #666; }
+        .bar { height: 100%; background: linear-gradient(90deg,#4CAF50,#8BC34A); transition: width 0.3s ease; display:flex; align-items:center; justify-content:center; font-size:0.85em; font-weight:bold; }
+        .bar.mana { background: linear-gradient(90deg,#2196F3,#00BCD4); }
+        .bar.lives { background: linear-gradient(90deg,#F44336,#E91E63); }
+        .rocket-alert { margin-top:10px; padding:10px; background: rgba(255,215,0,0.2); border-left:4px solid #FFD700; border-radius:5px; font-weight:bold; color:#FFD700; display:none; }
+        .rocket-alert.active { display:block; animation: pulse 0.5s infinite alternate; }
+        @keyframes pulse { from { background: rgba(255,215,0,0.2); } to { background: rgba(255,215,0,0.4); } }
+        .actions { margin-top:20px; }
+        .action-buttons { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+        .btn-spell { background: linear-gradient(135deg,#9B5CF6,#7A3FE3); color:white; }
+        .btn-launch { background: linear-gradient(135deg,#FFD700,#FFC700); color:#000; }
+        button { padding:12px 20px; font-size:1em; border:none; border-radius:5px; cursor:pointer; font-weight:bold; transition: all 0.3s ease; text-transform:uppercase; letter-spacing:1px; }
+        .btn-attack { background: linear-gradient(135deg,#FF6B6B,#E63946); color:white; }
+        .btn-defend { background: linear-gradient(135deg,#4ECDC4,#45B7AA); color:white; }
+        button:disabled { opacity:0.5; cursor:not-allowed; transform: scale(0.95); }
+        .log-area { background: rgba(0,0,0,0.5); border-radius:10px; padding:20px; border:2px solid #666; height:150px; overflow-y:auto; margin-bottom:20px; }
+        .log-entry { margin:5px 0; padding:5px; border-radius:3px; font-size:0.95em; }
+        .log-entry.attack { background: rgba(255,107,107,0.2); color:#FFB6B6; }
+        .log-entry.defend { background: rgba(78,205,196,0.2); color:#A8F0ED; }
+        .log-entry.rocket { background: rgba(255,215,0,0.3); color:#FFFF99; font-weight:bold; animation: shake 0.5s; }
+        @keyframes shake { 0%,100%{ transform: translateX(0);} 25%{ transform: translateX(-5px);} 75%{ transform: translateX(5px);} }
+        .log-entry.gameover { background: rgba(76,175,80,0.3); color:#B8FF99; font-weight:bold; text-align:center; font-size:1.1em; }
+        .game-over-screen { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.9); display:none; justify-content:center; align-items:center; z-index:1000; flex-direction:column; }
+        .game-over-screen.active { display:flex; }
+        .game-over-content { text-align:center; background: linear-gradient(135deg, rgba(0,0,0,0.8), rgba(0,0,0,0.6)); padding:40px; border-radius:20px; border:3px solid #FFD700; box-shadow:0 0 50px rgba(255,215,0,0.5); }
+        .game-over-content h1 { font-size:3em; margin-bottom:20px; color:#FFD700; text-shadow:0 0 10px rgba(255,215,0,0.8); }
+        .game-over-content p { font-size:1.5em; margin:20px 0; color:#fff; }
+        .game-over-content button { margin-top:30px; padding:15px 40px; font-size:1.2em; background: linear-gradient(135deg,#FFD700,#FFC700); color:#000; border:2px solid #fff; }
+        .controls-info { background: rgba(0,0,0,0.5); border-radius:10px; padding:15px; margin-bottom:20px; border-left:4px solid #FFD700; font-size:0.9em; line-height:1.6; }
+        .controls-info h3 { margin-bottom:10px; color:#FFD700; }
+        .current-turn { text-align:center; font-size:1.2em; margin-bottom:15px; font-weight:bold; color:#FFD700; }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="title">⚔️ RPG with RPG ⚔️</div>
+        <div class="controls-info">
+            <h3>Controls</h3>
+            <strong>Player 1 (Red):</strong> Q = Attack, W = Defend, E = Spell, R = Launch<br>
+            <strong>Player 2 (Cyan):</strong> U = Attack, I = Defend, O = Spell, P = Launch<br>
+            <em>Fill your mana bar to arm your RPG, then press Launch to fire.</em>
+        </div>
+
+        <div class="current-turn" id="currentTurn">Player 1's Turn</div>
+
+        <div class="battle-area">
+            <div class="player-card p1 active" id="player1Card">
+                <div class="player-name">Player 1</div>
+                <div class="stat">
+                    <span class="stat-label">Lives:</span>
+                    <div class="bar-container">
+                        <div class="bar lives" id="p1Lives" style="width: 100%">3/3</div>
+                    </div>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Mana:</span>
+                    <div class="bar-container">
+                        <div class="bar mana" id="p1Mana" style="width: 0%">0/100</div>
+                    </div>
+                </div>
+                <div class="rocket-alert" id="p1Rocket">🚀 READY TO LAUNCH!</div>
+                <div class="actions">
+                    <div class="action-buttons">
+                        <button class="btn-attack" id="p1Attack">Attack (Q)</button>
+                        <button class="btn-defend" id="p1Defend">Defend (W)</button>
+                        <button class="btn-spell" id="p1Spell">Spell</button>
+                        <button class="btn-launch" id="p1Launch">Launch</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="player-card p2" id="player2Card">
+                <div class="player-name">Player 2</div>
+                <div class="stat">
+                    <span class="stat-label">Lives:</span>
+                    <div class="bar-container">
+                        <div class="bar lives" id="p2Lives" style="width: 100%">3/3</div>
+                    </div>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Mana:</span>
+                    <div class="bar-container">
+                        <div class="bar mana" id="p2Mana" style="width: 0%">0/100</div>
+                    </div>
+                </div>
+                <div class="rocket-alert" id="p2Rocket">🚀 READY TO LAUNCH!</div>
+                <div class="actions">
+                    <div class="action-buttons">
+                        <button class="btn-attack" id="p2Attack">Attack (U)</button>
+                        <button class="btn-defend" id="p2Defend">Defend (I)</button>
+                        <button class="btn-spell" id="p2Spell">Spell</button>
+                        <button class="btn-launch" id="p2Launch">Launch</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="log-area" id="logArea"></div>
+
+        <div class="game-over-screen" id="gameOverScreen">
+            <div class="game-over-content">
+                <h1 id="gameOverTitle">🎉 VICTORY! 🎉</h1>
+                <p id="gameOverText"></p>
+                <button onclick="location.reload()">Play Again</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game State
+        const game = {
+            player1: { baseLives: 3, tempLives: [], mana: 0, isDefending: false, name: 'Player 1', rpgArmed: false, rpgReadyTurns: 0 },
+            player2: { baseLives: 3, tempLives: [], mana: 0, isDefending: false, name: 'Player 2', rpgArmed: false, rpgReadyTurns: 0 },
+            currentTurn: 1,
+            gameOver: false
+        };
+
+        // Constants
+        const MANA_MIN = 8;
+        const MANA_MAX = 60;
+        const MANA_SKEW_EXPONENT = 2.2; // >1 makes large gains less likely
+        const MANA_REDUCTION = 18;
+        const MANA_REDUCTION_VARIATION = 6;
+        const MAX_MANA = 100;
+        const RPG_TIMEOUT_TURNS = 5;
+        const RPG_TIMEOUT_PENALTY = 10;
+        const OVERHEAL_TURNS = 20;
+        const MAX_BASE_LIVES = 3;
+        const MAX_TOTAL_LIVES = 5; // base + temp
+
+        // DOM Elements
+        const p1LivesBar = document.getElementById('p1Lives');
+        const p1ManaBar = document.getElementById('p1Mana');
+        const p2LivesBar = document.getElementById('p2Lives');
+        const p2ManaBar = document.getElementById('p2Mana');
+        const logArea = document.getElementById('logArea');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const currentTurnDisplay = document.getElementById('currentTurn');
+        const p1Card = document.getElementById('player1Card');
+        const p2Card = document.getElementById('player2Card');
+
+        // Initialize button listeners
+        document.getElementById('p1Attack').addEventListener('click', () => playerAction(1, 'attack'));
+        document.getElementById('p1Defend').addEventListener('click', () => playerAction(1, 'defend'));
+        document.getElementById('p1Spell')?.addEventListener('click', () => playerAction(1, 'spell'));
+        document.getElementById('p1Launch')?.addEventListener('click', () => playerAction(1, 'launch'));
+        document.getElementById('p2Attack').addEventListener('click', () => playerAction(2, 'attack'));
+        document.getElementById('p2Defend').addEventListener('click', () => playerAction(2, 'defend'));
+        document.getElementById('p2Spell')?.addEventListener('click', () => playerAction(2, 'spell'));
+        document.getElementById('p2Launch')?.addEventListener('click', () => playerAction(2, 'launch'));
+
+        // Keyboard Controls
+        document.addEventListener('keydown', (e) => {
+            if (game.gameOver) return;
+            const key = e.key.toLowerCase();
+            // Player 1: Q = Attack, W = Defend, E = Spell, R = Launch
+            if (game.currentTurn === 1) {
+                if (key === 'q') playerAction(1, 'attack');
+                else if (key === 'w') playerAction(1, 'defend');
+                else if (key === 'e') playerAction(1, 'spell');
+                else if (key === 'r') playerAction(1, 'launch');
+            }
+            // Player 2: U = Attack, I = Defend, O = Spell, P = Launch
+            if (game.currentTurn === 2) {
+                if (key === 'u') playerAction(2, 'attack');
+                else if (key === 'i') playerAction(2, 'defend');
+                else if (key === 'o') playerAction(2, 'spell');
+                else if (key === 'p') playerAction(2, 'launch');
+            }
+        });
+
+        function playerAction(player, action) {
+            if (game.gameOver || game.currentTurn !== player) return;
+
+            const actor = player === 1 ? game.player1 : game.player2;
+            const opponent = player === 1 ? game.player2 : game.player1;
+
+            if (action === 'attack') performAttack(actor, opponent, player);
+            else if (action === 'defend') performDefense(actor, player);
+            else if (action === 'spell') performSpell(actor, player);
+            else if (action === 'launch') performLaunch(actor, opponent, player);
+
+            endTurn();
+        }
+
+        function getTotalLives(player) {
+            return player.baseLives + player.tempLives.length;
+        }
+
+        function grantTempLife(player, count = 1) {
+            for (let i = 0; i < count; i++) {
+                if (getTotalLives(player) >= MAX_TOTAL_LIVES) break;
+                player.tempLives.push({ turns: OVERHEAL_TURNS });
+            }
+        }
+
+        function performAttack(actor, opponent, playerNum) {
+            // Skewed random: small gains common, large gains rare
+            const r = Math.random();
+            const skew = Math.pow(r, MANA_SKEW_EXPONENT);
+            const manaGain = MANA_MIN + (MANA_MAX - MANA_MIN) * skew;
+
+            let actualManaGain = manaGain;
+            if (opponent.isDefending) {
+                const reduction = MANA_REDUCTION + (Math.random() - 0.5) * 2 * MANA_REDUCTION_VARIATION;
+                actualManaGain = Math.max(0, manaGain - reduction);
+                addLog(`${actor.name} attacked, but ${opponent.name} defended! Mana gain reduced: ${manaGain.toFixed(1)} → ${actualManaGain.toFixed(1)}`, 'attack');
+            } else {
+                addLog(`${actor.name} attacked and gained ${actualManaGain.toFixed(1)} mana.`, 'attack');
+            }
+
+            // Attacker gains mana
+            actor.mana = Math.min(MAX_MANA, actor.mana + actualManaGain);
+            // Consume defender's stance if it was used
+            opponent.isDefending = false;
+
+            // If reached max mana, arm RPG but do not auto-fire
+            if (actor.mana >= MAX_MANA && !actor.rpgArmed) {
+                actor.rpgArmed = true;
+                actor.rpgReadyTurns = 0;
+                addLog(`${actor.name}'s RPG is armed! Use Launch to fire within ${RPG_TIMEOUT_TURNS} turns or lose ${RPG_TIMEOUT_PENALTY} mana.`, 'attack');
+            }
+
+            updateUI();
+        }
+
+        function performDefense(actor, playerNum) {
+            actor.isDefending = true;
+            addLog(`${actor.name} took a defensive stance!`, 'defend');
+            updateUI();
+        }
+
+        function performSpell(actor, playerNum) {
+            const startMana = actor.mana;
+            const cost = startMana < 50 ? 10 : 20;
+            if (actor.mana < cost) {
+                addLog(`${actor.name} tried to cast a spell but didn't have ${cost} mana.`, 'defend');
+                return;
+            }
+
+            // Overall success probability increases with mana (lower mana -> lower chance)
+            const manaRatio = Math.min(1, startMana / MAX_MANA);
+            const successProb = 0.15 + 0.75 * manaRatio; // 0.15..0.9
+            const overhealProb = 0.05 + 0.30 * manaRatio; // within successes, chance of overheal
+
+            const roll = Math.random();
+            actor.mana = Math.max(0, actor.mana - cost);
+
+            if (roll > successProb) {
+                addLog(`${actor.name}'s spell fizzled and did nothing. (roll ${(roll).toFixed(2)} > success ${(successProb).toFixed(2)})`, 'defend');
+                updateUI();
+                return;
+            }
+
+            // Spell succeeded; determine overheal vs heal
+            const roll2 = Math.random();
+            if (roll2 < overhealProb) {
+                if (getTotalLives(actor) < MAX_TOTAL_LIVES) {
+                    grantTempLife(actor, 1);
+                    addLog(`${actor.name} cast a spell and OVERHEALED! +1 temporary life (lasting ${OVERHEAL_TURNS} turns).`, 'defend');
+                } else {
+                    addLog(`${actor.name} cast a spell but already has maximum lives.`, 'defend');
+                }
+            } else {
+                if (actor.baseLives < MAX_BASE_LIVES) {
+                    actor.baseLives += 1;
+                    addLog(`${actor.name} cast a spell and healed 1 life (base).`, 'defend');
+                } else if (getTotalLives(actor) < MAX_TOTAL_LIVES) {
+                    grantTempLife(actor, 1);
+                    addLog(`${actor.name} cast a spell and gained 1 temporary life (lasting ${OVERHEAL_TURNS} turns).`, 'defend');
+                } else {
+                    addLog(`${actor.name} cast a spell but is already at maximum lives.`, 'defend');
+                }
+            }
+
+            updateUI();
+        }
+
+        function performLaunch(attacker, defender, attackerPlayer) {
+            if (!attacker.rpgArmed) {
+                addLog(`${attacker.name} tried to launch an RPG but it's not armed.`, 'rocket');
+                return;
+            }
+
+            // Fire rocket: consume mana and deal one life (temp lives first)
+            attacker.mana = 0;
+            attacker.rpgArmed = false;
+            attacker.rpgReadyTurns = 0;
+
+            if (defender.tempLives.length > 0) {
+                defender.tempLives.shift();
+                addLog(`🚀 ${attacker.name} launched an RPG! ${defender.name} loses 1 temporary overheal life.`, 'rocket');
+            } else {
+                defender.baseLives -= 1;
+                addLog(`🚀 ${attacker.name} launched an RPG! ${defender.name} loses 1 base life.`, 'rocket');
+            }
+
+            updateUI();
+
+            // Check for game over
+            if (defender.baseLives <= 0 && defender.tempLives.length === 0) {
+                endGame(attackerPlayer);
+            }
+        }
+
+        function endTurn() {
+            // On end of turn: increment RPG ready timers and handle timeouts
+            [game.player1, game.player2].forEach((p, idx) => {
+                if (p.rpgArmed) {
+                    p.rpgReadyTurns += 1;
+                    if (p.rpgReadyTurns >= RPG_TIMEOUT_TURNS) {
+                        p.mana = Math.max(0, p.mana - RPG_TIMEOUT_PENALTY);
+                        p.rpgArmed = false;
+                        p.rpgReadyTurns = 0;
+                        addLog(`${p.name} didn't launch in time and lost ${RPG_TIMEOUT_PENALTY} mana.`, 'attack');
+                    }
+                }
+
+                // Decrement temp life timers
+                for (let i = p.tempLives.length - 1; i >= 0; i--) {
+                    p.tempLives[i].turns -= 1;
+                    if (p.tempLives[i].turns <= 0) {
+                        p.tempLives.splice(i, 1);
+                        addLog(`${p.name}'s temporary overheal expired.`, 'defend');
+                    }
+                }
+            });
+
+            // Switch turn
+            game.currentTurn = game.currentTurn === 1 ? 2 : 1;
+            updateTurnDisplay();
+            updateUI();
+        }
+
+        function updateUI() {
+            // Update Player 1
+            const p1Total = getTotalLives(game.player1);
+            p1LivesBar.style.width = (p1Total / MAX_TOTAL_LIVES * 100) + '%';
+            p1LivesBar.textContent = `${p1Total}/${MAX_TOTAL_LIVES}`;
+            p1ManaBar.style.width = (game.player1.mana / MAX_MANA * 100) + '%';
+            p1ManaBar.textContent = `${Math.floor(game.player1.mana)}/${MAX_MANA}`;
+            const p1RocketAlert = document.getElementById('p1Rocket');
+            if (game.player1.rpgArmed) p1RocketAlert.classList.add('active'); else p1RocketAlert.classList.remove('active');
+
+            // Update Player 2
+            const p2Total = getTotalLives(game.player2);
+            p2LivesBar.style.width = (p2Total / MAX_TOTAL_LIVES * 100) + '%';
+            p2LivesBar.textContent = `${p2Total}/${MAX_TOTAL_LIVES}`;
+            p2ManaBar.style.width = (game.player2.mana / MAX_MANA * 100) + '%';
+            p2ManaBar.textContent = `${Math.floor(game.player2.mana)}/${MAX_MANA}`;
+            const p2RocketAlert = document.getElementById('p2Rocket');
+            if (game.player2.rpgArmed) p2RocketAlert.classList.add('active'); else p2RocketAlert.classList.remove('active');
+
+            // Enable/disable buttons based on turn and mana
+            const p1SpellBtn = document.getElementById('p1Spell');
+            const p1LaunchBtn = document.getElementById('p1Launch');
+            const p2SpellBtn = document.getElementById('p2Spell');
+            const p2LaunchBtn = document.getElementById('p2Launch');
+            if (p1SpellBtn) {
+                const cost1 = (game.player1.mana < 50) ? 10 : 20;
+                p1SpellBtn.disabled = !(game.currentTurn === 1 && game.player1.mana >= cost1 && !game.gameOver);
+            }
+            if (p2SpellBtn) {
+                const cost2 = (game.player2.mana < 50) ? 10 : 20;
+                p2SpellBtn.disabled = !(game.currentTurn === 2 && game.player2.mana >= cost2 && !game.gameOver);
+            }
+            if (p1LaunchBtn) p1LaunchBtn.disabled = !(game.currentTurn === 1 && game.player1.rpgArmed && !game.gameOver);
+            if (p2LaunchBtn) p2LaunchBtn.disabled = !(game.currentTurn === 2 && game.player2.rpgArmed && !game.gameOver);
+
+            // Update active player card highlighting
+            if (game.currentTurn === 1) { p1Card.classList.add('active'); p2Card.classList.remove('active'); }
+            else { p1Card.classList.remove('active'); p2Card.classList.add('active'); }
+        }
+
+        function updateTurnDisplay() {
+            currentTurnDisplay.textContent = `${game.currentTurn === 1 ? 'Player 1' : 'Player 2'}'s Turn`;
+        }
+
+        function addLog(message, type = 'default') {
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${type}`;
+            entry.textContent = message;
+            logArea.appendChild(entry);
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        function endGame(winner) {
+            game.gameOver = true;
+            gameOverScreen.classList.add('active');
+            const gameOverTitle = document.getElementById('gameOverTitle');
+            const gameOverText = document.getElementById('gameOverText');
+            gameOverTitle.textContent = `🎉 PLAYER ${winner} WINS! 🎉`;
+            gameOverText.textContent = `${game['player' + winner].name} defeated their opponent!`;
+            addLog(`GAME OVER - Player ${winner} wins!`, 'gameover');
+        }
+
+        // Initial UI update
+        updateUI();
+        updateTurnDisplay();
+        addLog('Welcome to RPG with RPG! Attacks give you mana. Cast spells to heal or overheal. Arm your RPG and use Launch to fire before it decays.', 'default');
+    </script>
+</body>
+</html>

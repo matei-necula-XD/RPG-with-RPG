@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>3D Splitscreen Parkour</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: sans-serif;
+    }
+    #info {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: white;
+      z-index: 10;
+      font-size: 14px;
+      background: rgba(0,0,0,0.4);
+      padding: 6px 10px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+<div id="info">
+  Player 1: W A S D &nbsp; | &nbsp; Player 2: Arrow Keys<br>
+  Fall into the void → respawn at last checkpoint.
+</div>
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<script>
+  // ----- Basic setup -----
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x202030);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(window.devicePixelRatio);
+  document.body.appendChild(renderer.domElement);
+
+  // Two cameras for splitscreen
+  const aspect = window.innerWidth / window.innerHeight;
+  const camera1 = new THREE.PerspectiveCamera(70, aspect, 0.1, 1000);
+  const camera2 = new THREE.PerspectiveCamera(70, aspect, 0.1, 1000);
+
+  // Lighting
+  const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+  scene.add(ambient);
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+  dirLight.position.set(5, 10, 7);
+  scene.add(dirLight);
+
+  // ----- Platforms / level -----
+  const platformMaterial = new THREE.MeshStandardMaterial({ color: 0x4444ff });
+  const checkpointMaterial = new THREE.MeshStandardMaterial({ color: 0x44ff44 });
+  const voidY = -10;
+
+  const platforms = [];
+
+  function addPlatform(x, y, z, w, h, d, isCheckpoint = false) {
+    const geom = new THREE.BoxGeometry(w, h, d);
+    const mat = isCheckpoint ? checkpointMaterial : platformMaterial;
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.position.set(x, y, z);
+    mesh.userData.isCheckpoint = isCheckpoint;
+    scene.add(mesh);
+    platforms.push(mesh);
+    return mesh;
+  }
+
+  // Start platform (checkpoint)
+  addPlatform(0, 0, 0, 10, 1, 10, true);
+
+  // Simple parkour path
+  addPlatform(0, 2, -12, 6, 1, 6);
+  addPlatform(3, 4, -24, 4, 1, 4);
+  addPlatform(-3, 6, -36, 4, 1, 4);
+  addPlatform(0, 8, -48, 6, 1, 6, true); // another checkpoint
+  addPlatform(0, 10, -62, 8, 1, 8);
+  addPlatform(4, 12, -76, 4, 1, 4);
+  addPlatform(-4, 14, -90, 4, 1, 4, true);
+
+  // ----- Players -----
+  function createPlayer(color) {
+    const geom = new THREE.BoxGeometry(1, 2, 1);
+    const mat = new THREE.MeshStandardMaterial({ color });
+    const mesh = new THREE.Mesh(geom, mat);
+    mesh.position.set(0, 2, 2);
+    scene.add(mesh);
+    return mesh;
+  }
+
+  const player1 = createPlayer(0xff5555);
+  const player2 = createPlayer(0x55ffdd);
+
+  const playerState = {
+    p1: {
+      velocity: new THREE.Vector3(),
+      onGround: false,
+      checkpoint: new THREE.Vector3(0, 2, 2)
+    },
+    p2: {
+      velocity: new THREE.Vector3(),
+      onGround: false,
+      checkpoint: new THREE.Vector3(0, 2, 2)
+    }
+  };
+
+  const gravity = -20;
+  const moveSpeed = 10;
+  const jumpSpeed = 10;
+
+  // ----- Input handling -----
+  const keys = {};
+  window.addEventListener('keydown', (e) => { keys[e.code] = true; });
+  window.addEventListener('keyup', (e) => { keys[e.code] = false; });
+
+  function handleMovement(player, state, dt, controls) {
+    const dir = new THREE.Vector3();
+
+    // Forward/back
+    if (keys[controls.forward]) dir.z -= 1;
+    if (keys[controls.backward]) dir.z += 1;
+    // Left/right
+    if (keys[controls.left]) dir.x -= 1;
+    if (keys[controls.right]) dir.x += 1;
+
+    if (dir.lengthSq() > 0) {
+      dir.normalize();
+      dir.multiplyScalar(moveSpeed * dt);
+      player.position.add(dir);
+    }
+
+    // Jump
+    if (keys[controls.jump] && state.onGround) {
+      state.velocity.y = jumpSpeed;
+      state.onGround = false;
+    }
+
+    // Gravity
+    state.velocity.y += gravity * dt;
+    player.position.y += state.velocity.y * dt;
+
+    // Collision with platforms (simple AABB)
+    state.onGround = false;
+    for (const plat of platforms) {
+      const px = player.position.x;
+      const py = player.position.y;
+      const pz = player.position.z;
+
+      const bx = plat.position.x;
+      const by = plat.position.y;
+      const bz = plat.position.z;
+
+      const hx = plat.geometry.parameters.width / 2;
+      const hy = plat.geometry.parameters.height / 2;
+      const hz = plat.geometry.parameters.depth / 2;
+
+      const onTop =
+        px > bx - hx && px < bx + hx &&
+        pz > bz - hz && pz < bz + hz &&
+        py > by && py < by + hy + 1.0; // small tolerance
+
+      if (onTop && state.velocity.y <= 0) {
+        player.position.y = by + hy + 1.0;
+        state.velocity.y = 0;
+        state.onGround = true;
+
+        if (plat.userData.isCheckpoint) {
+          state.checkpoint.copy(player.position);
+        }
+      }
+    }
+
+    // Void check
+    if (player.position.y < voidY) {
+      player.position.copy(state.checkpoint);
+      state.velocity.set(0, 0, 0);
+    }
+  }
+
+  const controlsP1 = {
+    forward: 'KeyW',
+    backward: 'KeyS',
+    left: 'KeyA',
+    right: 'KeyD',
+    jump: 'Space'
+  };
+
+  const controlsP2 = {
+    forward: 'ArrowUp',
+    backward: 'ArrowDown',
+    left: 'ArrowLeft',
+    right: 'ArrowRight',
+    jump: 'Numpad0' // change if you like
+  };
+
+  // ----- Resize -----
+  window.addEventListener('resize', () => {
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  // ----- Animation loop -----
+  let lastTime = performance.now();
+
+  function animate(now) {
+    requestAnimationFrame(animate);
+    const dt = (now - lastTime) / 1000;
+    lastTime = now;
+
+    handleMovement(player1, playerState.p1, dt, controlsP1);
+    handleMovement(player2, playerState.p2, dt, controlsP2);
+
+    // Position cameras behind players
+    function updateCamera(cam, player) {
+      const offset = new THREE.Vector3(0, 5, 10);
+      const target = player.position.clone();
+      const camPos = player.position.clone().add(offset);
+      cam.position.copy(camPos);
+      cam.lookAt(target);
+    }
+
+    updateCamera(camera1, player1);
+    updateCamera(camera2, player2);
+
+    // Render splitscreen
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    renderer.setScissorTest(true);
+
+    // Top half - Player 1
+    renderer.setViewport(0, height / 2, width, height / 2);
+    renderer.setScissor(0, height / 2, width, height / 2);
+    renderer.render(scene, camera1);
+
+    // Bottom half - Player 2
+    renderer.setViewport(0, 0, width, height / 2);
+    renderer.setScissor(0, 0, width, height / 2);
+    renderer.render(scene, camera2);
+
+    renderer.setScissorTest(false);
+  }
+
+  animate(performance.now());
+</script>
+</body>
+</html>
