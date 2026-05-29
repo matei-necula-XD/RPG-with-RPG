@@ -46,9 +46,12 @@
         .menu-content h1 { font-size: 3em; margin-bottom: 20px; color:#FFD700; }
         .menu-content p { color:#eee; margin-bottom: 25px; font-size:1.05em; }
         .menu-options, .difficulty-select { display:grid; grid-template-columns: repeat(3,1fr); gap: 15px; margin-bottom: 20px; }
-        .menu-options button, .difficulty-select button { padding: 15px 20px; border:none; border-radius: 12px; font-size: 1em; cursor:pointer; font-weight:bold; transition: transform 0.2s ease, background 0.2s ease; }
-        .menu-options button:hover, .difficulty-select button:hover { transform: translateY(-2px); }
+        .ability-select { display:grid; grid-template-columns: repeat(2,1fr); gap: 15px; margin-bottom: 20px; }
+        .menu-options button, .difficulty-select button, .ability-select button { padding: 15px 20px; border:none; border-radius: 12px; font-size: 1em; cursor:pointer; font-weight:bold; transition: transform 0.2s ease, background 0.2s ease; }
+        .menu-options button:hover, .difficulty-select button:hover, .ability-select button:hover { transform: translateY(-2px); }
         .difficulty-select button.active { background: linear-gradient(135deg,#9B5CF6,#7A3FE3); color:white; }
+        .ability-select button.active { background: linear-gradient(135deg,#FF6B6B,#FF8A65); color:white; }
+        .turn-counter { text-align:center; margin-bottom:10px; font-size:1.1em; font-weight:bold; color:#FFD700; }
         .menu-hidden { display:none; }
         .game-over-content { text-align:center; background: linear-gradient(135deg, rgba(0,0,0,0.8), rgba(0,0,0,0.6)); padding:40px; border-radius:20px; border:3px solid #FFD700; box-shadow:0 0 50px rgba(255,215,0,0.5); }
         .game-over-content h1 { font-size:3em; margin-bottom:20px; color:#FFD700; text-shadow:0 0 10px rgba(255,215,0,0.8); }
@@ -75,6 +78,11 @@
                 <button class="difficulty-btn" data-diff="medium" id="diffMedium">Medium</button>
                 <button class="difficulty-btn" data-diff="hard" id="diffHard">Hard</button>
             </div>
+            <div class="ability-select" id="abilitySelect">
+                <button class="ability-btn active" data-ability="break" id="abilityBreak">BREAK</button>
+                <button class="ability-btn" data-ability="charge" id="abilityCharge">CHARGE</button>
+            </div>
+            <p id="abilityHint">Special ability selected: BREAK.</p>
             <p id="menuHint">Select a mode to begin.</p>
         </div>
     </div>
@@ -87,6 +95,7 @@
             <em>Fill your mana bar to arm your RPG, then press Launch to fire.</em>
         </div>
 
+        <div class="turn-counter" id="turnCounter">Turn: 1</div>
         <div class="current-turn" id="currentTurn">Player 1's Turn</div>
         <div class="current-mode" id="currentMode">Mode: Two Player</div>
 
@@ -104,6 +113,14 @@
                     <div class="bar-container">
                         <div class="bar mana" id="p1Mana" style="width: 0%">0/100</div>
                     </div>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Special:</span>
+                    <span id="p1Special">BREAK</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Status:</span>
+                    <span id="p1Status">Ready</span>
                 </div>
                 <div class="rocket-alert" id="p1Rocket">🚀 READY TO LAUNCH!</div>
                 <div class="actions">
@@ -129,6 +146,14 @@
                     <div class="bar-container">
                         <div class="bar mana" id="p2Mana" style="width: 0%">0/100</div>
                     </div>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Special:</span>
+                    <span id="p2Special">BREAK</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Status:</span>
+                    <span id="p2Status">Ready</span>
                 </div>
                 <div class="rocket-alert" id="p2Rocket">🚀 READY TO LAUNCH!</div>
                 <div class="actions">
@@ -156,12 +181,38 @@
     <script>
         // Game State
         const game = {
-            player1: { baseLives: 3, tempLives: [], mana: 0, isDefending: false, name: 'Player 1', rpgArmed: false, rpgReadyTurns: 0 },
-            player2: { baseLives: 3, tempLives: [], mana: 0, isDefending: false, name: 'Player 2', rpgArmed: false, rpgReadyTurns: 0 },
+            player1: {
+                baseLives: 3,
+                tempLives: [],
+                mana: 0,
+                isDefending: false,
+                name: 'Player 1',
+                rpgArmed: false,
+                rpgReadyTurns: 0,
+                specialAbility: 'break',
+                chargeTurns: 0,
+                stunnedTurns: 0,
+                blockOverhealTurns: 0
+            },
+            player2: {
+                baseLives: 3,
+                tempLives: [],
+                mana: 0,
+                isDefending: false,
+                name: 'Player 2',
+                rpgArmed: false,
+                rpgReadyTurns: 0,
+                specialAbility: 'break',
+                chargeTurns: 0,
+                stunnedTurns: 0,
+                blockOverhealTurns: 0
+            },
             currentTurn: 1,
+            turnCount: 1,
             gameOver: false,
             mode: 'local',
-            botDifficulty: 'easy'
+            botDifficulty: 'easy',
+            selectedAbility: 'break'
         };
 
         // Constants
@@ -192,6 +243,9 @@
         const p1NameLabel = document.querySelector('#player1Card .player-name');
         const p2NameLabel = document.querySelector('#player2Card .player-name');
         const difficultyButtons = document.querySelectorAll('.difficulty-btn');
+        const abilityButtons = document.querySelectorAll('.ability-btn');
+        const turnCounterDisplay = document.getElementById('turnCounter');
+        const abilityHint = document.getElementById('abilityHint');
         const twoPlayerBtn = document.getElementById('twoPlayerBtn');
         const singlePlayerBtn = document.getElementById('singlePlayerBtn');
         const instructionsBtn = document.getElementById('instructionsBtn');
@@ -201,6 +255,9 @@
         // Initialize menu listeners
         difficultyButtons.forEach((button) => {
             button.addEventListener('click', () => setDifficulty(button.dataset.diff));
+        });
+        abilityButtons.forEach((button) => {
+            button.addEventListener('click', () => setSpecialAbility(button.dataset.ability));
         });
         twoPlayerBtn.addEventListener('click', () => startGame('local'));
         singlePlayerBtn.addEventListener('click', () => startGame('bot'));
@@ -245,6 +302,12 @@
             const actor = player === 1 ? game.player1 : game.player2;
             const opponent = player === 1 ? game.player2 : game.player1;
 
+            if (actor.stunnedTurns > 0) {
+                addLog(`${actor.name} is stunned and skips a turn!`, 'defend');
+                endTurn();
+                return;
+            }
+
             if (action === 'attack') performAttack(actor, opponent, player);
             else if (action === 'defend') performDefense(actor, player);
             else if (action === 'spell') performSpell(actor, player);
@@ -262,13 +325,36 @@
             difficultyButtons.forEach((button) => {
                 button.classList.toggle('active', button.dataset.diff === difficulty);
             });
-            menuHint.textContent = `Bot difficulty set to ${difficulty}.`; 
+            menuHint.textContent = `Bot difficulty set to ${difficulty}.`;
+        }
+
+        function setSpecialAbility(ability) {
+            game.selectedAbility = ability;
+            abilityButtons.forEach((button) => {
+                button.classList.toggle('active', button.dataset.ability === ability);
+            });
+            abilityHint.textContent = `Special ability selected: ${ability.toUpperCase()}.`;
         }
 
         function resetGameState() {
-            game.player1 = { baseLives: 3, tempLives: [], mana: 0, isDefending: false, name: 'Player 1', rpgArmed: false, rpgReadyTurns: 0 };
-            game.player2 = { baseLives: 3, tempLives: [], mana: 0, isDefending: false, name: game.mode === 'bot' ? 'Bot' : 'Player 2', rpgArmed: false, rpgReadyTurns: 0 };
+            const defaultPlayerState = () => ({
+                baseLives: 3,
+                tempLives: [],
+                mana: 0,
+                isDefending: false,
+                name: 'Player',
+                rpgArmed: false,
+                rpgReadyTurns: 0,
+                specialAbility: game.selectedAbility,
+                chargeTurns: 0,
+                stunnedTurns: 0,
+                blockOverhealTurns: 0
+            });
+
+            game.player1 = { ...defaultPlayerState(), name: 'Player 1' };
+            game.player2 = { ...defaultPlayerState(), name: game.mode === 'bot' ? 'Bot' : 'Player 2' };
             game.currentTurn = 1;
+            game.turnCount = 1;
             game.gameOver = false;
             logArea.innerHTML = '';
             updateTurnDisplay();
@@ -301,38 +387,69 @@
             currentModeDisplay.textContent = `Mode: ${modeText}`;
         }
 
+        function weightedChoice(candidates) {
+            const total = candidates.reduce((sum, candidate) => sum + candidate.score, 0);
+            let choice = Math.random() * total;
+            for (const candidate of candidates) {
+                choice -= candidate.score;
+                if (choice <= 0) return candidate.action;
+            }
+            return candidates[candidates.length - 1].action;
+        }
+
+        function chooseBotAction(candidates) {
+            const difficulty = game.botDifficulty;
+            if (difficulty === 'easy') {
+                // easy bot prefers weaker or suboptimal options but can still act sensibly occasionally
+                if (Math.random() < 0.55) {
+                    return candidates.reduce((worst, candidate) => candidate.score < worst.score ? candidate : worst).action;
+                }
+                return weightedChoice(candidates.map(c => ({ action: c.action, score: c.score * 0.7 + 1 })));
+            }
+            if (difficulty === 'medium') {
+                return weightedChoice(candidates.map(c => ({ action: c.action, score: c.score + 1 })));
+            }
+            // hard: more likely to choose the best action, but still retains some unpredictability
+            if (Math.random() < 0.8) {
+                return candidates.reduce((best, candidate) => candidate.score > best.score ? candidate : best).action;
+            }
+            return weightedChoice(candidates.map(c => ({ action: c.action, score: Math.max(c.score, 1) })));
+        }
+
         function botTurn() {
             if (game.gameOver || game.mode !== 'bot' || game.currentTurn !== 2) return;
             const actor = game.player2;
             const opponent = game.player1;
-            const difficultyWeight = { easy: 0.4, medium: 0.7, hard: 0.9 }[game.botDifficulty] || 0.6;
-            const candidates = [];
-
-            const canLaunch = actor.rpgArmed;
-            const spellCost = actor.mana < 50 ? 10 : 20;
-            const canSpell = actor.mana >= spellCost;
-
-            if (canLaunch) candidates.push({ action: 'launch', score: 8 });
-            if (canSpell) {
-                const healValue = getTotalLives(actor) < MAX_TOTAL_LIVES ? 3 : 1;
-                candidates.push({ action: 'spell', score: 2 + healValue + (actor.mana / MAX_MANA) * 3 });
+            if (actor.stunnedTurns > 0) {
+                addLog(`${actor.name} is stunned and skips this turn.`, 'defend');
+                endTurn();
+                return;
             }
-            candidates.push({ action: 'attack', score: 3 + (actor.mana < 40 ? 4 : 0) + (opponent.isDefending ? 0 : 2) });
-            candidates.push({ action: 'defend', score: 2 + (opponent.rpgArmed ? 4 : 0) + (actor.mana < 30 ? 2 : 0) });
 
-            let action;
-            if (Math.random() < difficultyWeight) {
-                action = candidates.reduce((best, candidate) => candidate.score > best.score ? candidate : best).action;
-            } else {
-                const total = candidates.reduce((sum, candidate) => sum + candidate.score, 0);
-                let choice = Math.random() * total;
-                for (const candidate of candidates) {
-                    choice -= candidate.score;
-                    if (choice <= 0) { action = candidate.action; break; }
+            const candidates = [];
+            const canChargeLaunch = actor.specialAbility === 'charge' && actor.chargeTurns > 0;
+            const canRpgLaunch = actor.rpgArmed;
+            const canLaunch = canChargeLaunch || canRpgLaunch;
+            const spellCost = 50;
+            const canSpell = actor.mana >= spellCost && actor.specialAbility === 'charge' ? actor.chargeTurns === 0 : actor.mana >= spellCost;
+
+            if (canLaunch) {
+                const score = 9 + (opponent.baseLives + opponent.tempLives.length <= 2 ? 3 : 0) + (actor.chargeTurns > 0 ? 2 : 0);
+                candidates.push({ action: 'launch', score });
+            }
+            if (canSpell) {
+                if (actor.specialAbility === 'break') {
+                    const score = 4 + (opponent.isDefending ? 4 : 0) + (actor.mana > 80 ? 2 : 0);
+                    candidates.push({ action: 'spell', score });
+                } else {
+                    const score = 5 + (actor.chargeTurns === 0 ? 3 : -2) + (actor.mana > 80 ? 2 : 0);
+                    candidates.push({ action: 'spell', score });
                 }
             }
+            candidates.push({ action: 'attack', score: 3 + (actor.mana < 40 ? 3 : 0) + (opponent.isDefending ? 0 : 2) });
+            candidates.push({ action: 'defend', score: 3 + (opponent.rpgArmed ? 3 : 0) + (actor.mana < 30 ? 1 : 0) });
 
-            // Ensure legal fallback
+            let action = chooseBotAction(candidates);
             if (action === 'spell' && !canSpell) action = 'attack';
             if (action === 'launch' && !canLaunch) action = 'attack';
 
@@ -383,101 +500,99 @@
             updateUI();
         }
 
+        function damageOpponent(defender, count, actionName) {
+            for (let i = 0; i < count; i++) {
+                if (defender.tempLives.length > 0) {
+                    defender.tempLives.shift();
+                } else {
+                    defender.baseLives -= 1;
+                }
+            }
+            if (defender.baseLives <= 0 && defender.tempLives.length === 0) {
+                return true;
+            }
+            return false;
+        }
+
         function performSpell(actor, playerNum) {
-            const startMana = actor.mana;
-            const cost = startMana < 50 ? 15 : 30;
+            const opponent = actor === game.player1 ? game.player2 : game.player1;
+            const cost = 50;
             if (actor.mana < cost) {
-                addLog(`${actor.name} tried to cast a spell but didn't have ${cost} mana.`, 'defend');
+                addLog(`${actor.name} tried to use ${actor.specialAbility.toUpperCase()} but didn't have ${cost} mana.`, 'defend');
+                return;
+            }
+            if (actor.specialAbility === 'charge' && actor.chargeTurns > 0) {
+                addLog(`${actor.name} already has a CHARGE ready and cannot cast it again yet.`, 'defend');
                 return;
             }
 
-            // Lower mana means lower chance to succeed, and failures have a penalty.
-            const manaRatio = Math.min(1, startMana / MAX_MANA);
-            const successProb = 0.10 + 0.60 * manaRatio; // 0.10..0.70
-            const overhealProb = 0.05 + 0.25 * manaRatio; // 0.05..0.30
-
-            const roll = Math.random();
-            actor.mana = Math.max(0, actor.mana - cost);
-
-            if (roll > successProb) {
-                const penalty = 10;
-                const opponent = actor === game.player1 ? game.player2 : game.player1;
-                opponent.mana = Math.min(MAX_MANA, opponent.mana + penalty);
-                addLog(`${actor.name}'s spell fizzled and ${opponent.name} siphoned ${penalty} mana!`, 'defend');
-                updateUI();
-                return;
-            }
-
-            // Spell succeeded; determine overheal vs heal
-            const roll2 = Math.random();
-            const backfireRoll = Math.random();
-            const healBackfireProb = 0.15; // 15% chance on heal to make it temporary
-            const tempDestroyProb = 0.12; // 12% chance on overheal to destroy all temp lives
-
-            if (roll2 < overhealProb) {
-                // Overheal path
-                if (backfireRoll < tempDestroyProb && actor.tempLives.length > 0) {
-                    // Backfire: destroy all temp lives
-                    const tempCount = actor.tempLives.length;
-                    actor.tempLives = [];
-                    addLog(`${actor.name} cast a spell but it BACKFIRED! All ${tempCount} temporary overheal lives were destroyed!`, 'defend');
-                } else if (getTotalLives(actor) < MAX_TOTAL_LIVES) {
-                    grantTempLife(actor, 1);
-                    addLog(`${actor.name} cast a spell and OVERHEALED! +1 temporary life (lasting ${OVERHEAL_TURNS} turns).`, 'defend');
-                } else {
-                    addLog(`${actor.name} cast a spell but already has maximum lives.`, 'defend');
-                }
+            actor.mana -= cost;
+            if (actor.specialAbility === 'break') {
+                performBreak(actor, opponent);
             } else {
-                // Heal path
-                if (actor.baseLives < MAX_BASE_LIVES) {
-                    if (backfireRoll < healBackfireProb) {
-                        // Heal is temporary instead of permanent
-                        grantTempLife(actor, 1);
-                        addLog(`${actor.name} cast a spell and healed 1 life, but it's only temporary (lasting 15 turns)!`, 'defend');
-                    } else {
-                        actor.baseLives += 1;
-                        addLog(`${actor.name} cast a spell and healed 1 life (permanent).`, 'defend');
-                    }
-                } else if (getTotalLives(actor) < MAX_TOTAL_LIVES) {
-                    grantTempLife(actor, 1);
-                    addLog(`${actor.name} cast a spell and gained 1 temporary life (lasting ${OVERHEAL_TURNS} turns).`, 'defend');
-                } else {
-                    addLog(`${actor.name} cast a spell but is already at maximum lives.`, 'defend');
-                }
+                performCharge(actor, opponent);
             }
 
             updateUI();
         }
 
+        function performBreak(actor, opponent) {
+            const blocked = opponent.isDefending;
+            const bonus = blocked ? 20 + Math.floor(Math.random() * 21) : 0;
+            if (blocked) {
+                addLog(`${actor.name} used BREAK and shattered through ${opponent.name}'s block, gaining ${bonus} mana!`, 'attack');
+                actor.mana = Math.min(MAX_MANA, actor.mana + bonus);
+            } else {
+                addLog(`${actor.name} used BREAK and struck ${opponent.name}!`, 'attack');
+            }
+            opponent.isDefending = false;
+            const killed = damageOpponent(opponent, 1, 'BREAK');
+            if (killed) endGame(actor === game.player1 ? 1 : 2);
+        }
+
+        function performCharge(actor, opponent) {
+            actor.chargeTurns = CHARGE_DURATION_TURNS;
+            addLog(`${actor.name} used CHARGE! A special launch is available for ${CHARGE_DURATION_TURNS} turns.`, 'attack');
+        }
+
+        function performChargeLaunch(attacker, defender, attackerPlayer) {
+            attacker.chargeTurns = 0;
+            attacker.stunnedTurns = CHARGE_STUN_TURNS;
+            defender.blockOverhealTurns = CHARGE_BLOCK_OVERHEAL_TURNS;
+            defender.isDefending = false;
+            const killed = damageOpponent(defender, 2, 'CHARGE Launch');
+            addLog(`🚀 ${attacker.name} fired CHARGE launch! ${defender.name} loses 2 lives and cannot overheal for ${CHARGE_BLOCK_OVERHEAL_TURNS} turns.`, 'rocket');
+            if (killed) endGame(attackerPlayer);
+        }
+
         function performLaunch(attacker, defender, attackerPlayer) {
+            if (attacker.specialAbility === 'charge' && attacker.chargeTurns > 0) {
+                performChargeLaunch(attacker, defender, attackerPlayer);
+                return;
+            }
             if (!attacker.rpgArmed) {
                 addLog(`${attacker.name} tried to launch an RPG but it's not armed.`, 'rocket');
                 return;
             }
 
-            // Fire rocket: consume mana and deal one life (temp lives first)
             attacker.mana = 0;
             attacker.rpgArmed = false;
             attacker.rpgReadyTurns = 0;
+            defender.isDefending = false;
 
+            const killed = damageOpponent(defender, 1, 'RPG Launch');
             if (defender.tempLives.length > 0) {
-                defender.tempLives.shift();
                 addLog(`🚀 ${attacker.name} launched an RPG! ${defender.name} loses 1 temporary overheal life.`, 'rocket');
             } else {
-                defender.baseLives -= 1;
                 addLog(`🚀 ${attacker.name} launched an RPG! ${defender.name} loses 1 base life.`, 'rocket');
             }
-
             updateUI();
-
-            // Check for game over
-            if (defender.baseLives <= 0 && defender.tempLives.length === 0) {
-                endGame(attackerPlayer);
-            }
+            if (killed) endGame(attackerPlayer);
         }
 
         function endTurn() {
-            // On end of turn: increment RPG ready timers and handle timeouts
+            game.turnCount += 1;
+            // On end of turn: increment RPG ready timers, manage charge and status effects, and handle timeouts
             [game.player1, game.player2].forEach((p) => {
                 if (p.rpgArmed) {
                     p.rpgReadyTurns += 1;
@@ -488,7 +603,18 @@
                         addLog(`${p.name} didn't launch in time and lost ${RPG_TIMEOUT_PENALTY} mana.`, 'attack');
                     }
                 }
-
+                if (p.chargeTurns > 0) {
+                    p.chargeTurns -= 1;
+                    if (p.chargeTurns === 0) {
+                        addLog(`${p.name}'s CHARGE effect expired without firing.`, 'attack');
+                    }
+                }
+                if (p.stunnedTurns > 0) {
+                    p.stunnedTurns -= 1;
+                }
+                if (p.blockOverhealTurns > 0) {
+                    p.blockOverhealTurns -= 1;
+                }
                 // Decrement temp life timers
                 for (let i = p.tempLives.length - 1; i >= 0; i--) {
                     p.tempLives[i].turns -= 1;
@@ -518,6 +644,16 @@
             p1ManaBar.textContent = `${Math.floor(game.player1.mana)}/${MAX_MANA}`;
             const p1RocketAlert = document.getElementById('p1Rocket');
             if (game.player1.rpgArmed) p1RocketAlert.classList.add('active'); else p1RocketAlert.classList.remove('active');
+            const p1Special = document.getElementById('p1Special');
+            const p1Status = document.getElementById('p1Status');
+            if (p1Special) p1Special.textContent = game.player1.specialAbility.toUpperCase();
+            if (p1Status) {
+                const statusParts = [];
+                if (game.player1.chargeTurns > 0) statusParts.push(`CHARGE ${game.player1.chargeTurns}`);
+                if (game.player1.stunnedTurns > 0) statusParts.push(`STUNNED`);
+                if (game.player1.blockOverhealTurns > 0) statusParts.push(`NO OVERHEAL ${game.player1.blockOverhealTurns}`);
+                p1Status.textContent = statusParts.length ? statusParts.join(' / ') : 'Ready';
+            }
 
             // Update Player 2
             const p2Total = getTotalLives(game.player2);
@@ -527,6 +663,16 @@
             p2ManaBar.textContent = `${Math.floor(game.player2.mana)}/${MAX_MANA}`;
             const p2RocketAlert = document.getElementById('p2Rocket');
             if (game.player2.rpgArmed) p2RocketAlert.classList.add('active'); else p2RocketAlert.classList.remove('active');
+            const p2Special = document.getElementById('p2Special');
+            const p2Status = document.getElementById('p2Status');
+            if (p2Special) p2Special.textContent = game.player2.specialAbility.toUpperCase();
+            if (p2Status) {
+                const statusParts = [];
+                if (game.player2.chargeTurns > 0) statusParts.push(`CHARGE ${game.player2.chargeTurns}`);
+                if (game.player2.stunnedTurns > 0) statusParts.push(`STUNNED`);
+                if (game.player2.blockOverhealTurns > 0) statusParts.push(`NO OVERHEAL ${game.player2.blockOverhealTurns}`);
+                p2Status.textContent = statusParts.length ? statusParts.join(' / ') : 'Ready';
+            }
             if (p1NameLabel) p1NameLabel.textContent = game.player1.name;
             if (p2NameLabel) p2NameLabel.textContent = game.player2.name;
 
@@ -539,17 +685,17 @@
             const p2LaunchBtn = document.getElementById('p2Launch');
             const p2Enabled = game.mode === 'local' && game.currentTurn === 2 && !game.gameOver;
             if (p1SpellBtn) {
-                const cost1 = (game.player1.mana < 50) ? 10 : 20;
-                p1SpellBtn.disabled = !(game.currentTurn === 1 && game.player1.mana >= cost1 && !game.gameOver);
+                p1SpellBtn.textContent = `Spell (${game.player1.specialAbility.toUpperCase()})`;
+                p1SpellBtn.disabled = !(game.currentTurn === 1 && game.player1.mana >= 50 && !game.gameOver && !(game.player1.specialAbility === 'charge' && game.player1.chargeTurns > 0));
             }
             if (p2AttackBtn) p2AttackBtn.disabled = !p2Enabled;
             if (p2DefendBtn) p2DefendBtn.disabled = !p2Enabled;
             if (p2SpellBtn) {
-                const cost2 = (game.player2.mana < 50) ? 10 : 20;
-                p2SpellBtn.disabled = !(p2Enabled && game.player2.mana >= cost2);
+                p2SpellBtn.textContent = `Spell (${game.player2.specialAbility.toUpperCase()})`;
+                p2SpellBtn.disabled = !(p2Enabled && game.player2.mana >= 50 && !(game.player2.specialAbility === 'charge' && game.player2.chargeTurns > 0));
             }
-            if (p1LaunchBtn) p1LaunchBtn.disabled = !(game.currentTurn === 1 && game.player1.rpgArmed && !game.gameOver);
-            if (p2LaunchBtn) p2LaunchBtn.disabled = !(p2Enabled && game.player2.rpgArmed);
+            if (p1LaunchBtn) p1LaunchBtn.disabled = !(game.currentTurn === 1 && !game.gameOver && (game.player1.rpgArmed || (game.player1.specialAbility === 'charge' && game.player1.chargeTurns > 0)));
+            if (p2LaunchBtn) p2LaunchBtn.disabled = !(p2Enabled && (game.player2.rpgArmed || (game.player2.specialAbility === 'charge' && game.player2.chargeTurns > 0)));
 
             // Update active player card highlighting
             if (game.currentTurn === 1) { p1Card.classList.add('active'); p2Card.classList.remove('active'); }
@@ -557,6 +703,7 @@
         }
 
         function updateTurnDisplay() {
+            turnCounterDisplay.textContent = `Turn: ${game.turnCount}`;
             currentTurnDisplay.textContent = `${game.currentTurn === 1 ? 'Player 1' : 'Player 2'}'s Turn`;
         }
 
@@ -581,7 +728,7 @@
         // Initial UI update
         updateUI();
         updateTurnDisplay();
-        addLog('Welcome to RPG with RPG! Attacks give you mana. Cast spells to heal or overheal. Arm your RPG and use Launch to fire before it decays.', 'default');
+        addLog('Welcome to RPG with RPG! Attacks give mana, spells become BREAK or CHARGE, and Launch fires your rocket attack.', 'default');
     </script>
 </body>
 </html>
